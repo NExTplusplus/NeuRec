@@ -1,75 +1,77 @@
-'''
+"""
 Reference: Wang Xiang et al. "Neural Graph Collaborative Filtering." in SIGIR2019
 Source code: https://github.com/xiangwang1223/neural_graph_collaborative_filtering
 @author: wubin
-'''
+"""
 import tensorflow as tf
 import numpy as np
 import scipy.sparse as sp
 from time import time
-from neurec.util import data_gen
-from neurec.evaluation import Evaluate
+from neurec.util import DataGenerator, learner, tool
 from neurec.model.AbstractRecommender import AbstractRecommender
-from neurec.util.properties import Properties
+from neurec.util.DataIterator import DataIterator
+from neurec.util.tool import timer
+from neurec.util.tool import l2_loss
 
 class NGCF(AbstractRecommender):
     properties = [
         "learning_rate",
         "learner",
-        "topk",
         "batch_size",
         "embedding_size",
         "layer_size",
         "epochs",
         "reg",
-        "loss_function",
-        "node_dropout_flag",
         "adj_type",
         "alg_type",
+        "node_dropout_flag",
+        "node_dropout_ratio",
+        "mess_dropout_ratio",
+        "embed_init_method",
+        "weight_init_method",
+        "stddev",
         "verbose"
     ]
 
     def __init__(self, **kwds):
         super().__init__(**kwds)
-
+        
         self.learning_rate = self.conf["learning_rate"]
         self.learner = self.conf["learner"]
-        self.topK = self.conf["topk"]
-        self.batch_size= self.conf["batch_size"]
+        self.batch_size = self.conf["batch_size"]
         self.emb_dim = self.conf["embedding_size"]
         self.weight_size = self.conf["layer_size"]
         self.n_layers = len(self.weight_size)
-        self.num_epochs=self.conf["epochs"]
-        self.decay=self.conf["reg"]
-        self.loss_function=self.conf["loss_function"]
-        self.node_dropout_flag = self.conf["node_dropout_flag"]
+        self.num_epochs = self.conf["epochs"]
+        self.reg = self.conf["reg"]
         self.adj_type = self.conf["adj_type"]
         self.alg_type = self.conf["alg_type"]
+        self.node_dropout_flag = self.conf["node_dropout_flag"]
+        self.node_dropout_ratio = self.conf["node_dropout_ratio"]
+        self.mess_dropout_ratio = self.conf["mess_dropout_ratio"]
         self.n_fold = 100
-        self.verbose=self.conf["verbose"]
+        self.embed_init_method = self.conf["embed_init_method"]
+        self.weight_init_method = self.conf["weight_init_method"]
+        self.stddev = self.conf["stddev"]
+        self.verbose = self.conf["verbose"]
+        
         self.num_users = self.dataset.num_users
-        self.num_items = self.dataset.num_items
-        self.graph = self.dataset.trainMatrix.toarray()
-        self.norm_adj= self.get_adj_mat()
+        self.num_items = self.dataset.num_items    
+        self.graph = self.dataset.train_matrix.toarray()
+        self.norm_adj = self.get_adj_mat()
         self.n_nonzero_elems = self.norm_adj.count_nonzero()
         self.pretrain_data = None
+        
 
     def _create_placeholders(self):
         with tf.name_scope("input_data"):
             # placeholder definition
-            self.users = tf.placeholder(tf.int32, shape=(None,))
+            self.user_input = tf.placeholder(tf.int32, shape=(None,))
             self.pos_items = tf.placeholder(tf.int32, shape=(None,))
             self.neg_items = tf.placeholder(tf.int32, shape=(None,))
-
-            # dropout: node dropout (adopted on the ego-networks);
-            #          ... since the usage of node dropout have higher computational cost,
-            #          ... please use the 'node_dropout_flag' to indicate whether use such technique.
-            #          message dropout (adopted on the convolution operations).
-            self.node_dropout = tf.placeholder_with_default([0.], shape=[None])
-            self.mess_dropout = tf.placeholder_with_default([0.], shape=[None])
-
+            
     def _create_variables(self):
-        with tf.name_scope("embedding"):  # The embedding initialization is unknown now
+        with tf.name_scope("embedding"):  # The embedding initialization is unknown now   
             """
             *********************************************************
             Compute Graph-based Representations of all users & items via Message-Passing Mechanism of Graph Neural Networks.
@@ -80,16 +82,15 @@ class NGCF(AbstractRecommender):
             """
             # initialization of model parameters
             self.weights = self._init_weights()
-
+            
             if self.alg_type in ['ngcf']:
                 self.ua_embeddings, self.ia_embeddings = self._create_ngcf_embed()
-
+    
             elif self.alg_type in ['gcn']:
                 self.ua_embeddings, self.ia_embeddings = self._create_gcn_embed()
-
+    
             elif self.alg_type in ['gcmc']:
                 self.ua_embeddings, self.ia_embeddings = self._create_gcmc_embed()
-
 
     def _create_inference(self):
         with tf.name_scope("inference"):
@@ -97,76 +98,92 @@ class NGCF(AbstractRecommender):
             *********************************************************
             Establish the final representations for user-item pairs in batch.
             """
-            self.u_g_embeddings = tf.nn.embedding_lookup(self.ua_embeddings, self.users)
+            self.u_g_embeddings = tf.nn.embedding_lookup(self.ua_embeddings, self.user_input)
             self.pos_i_g_embeddings = tf.nn.embedding_lookup(self.ia_embeddings, self.pos_items)
             self.neg_i_g_embeddings = tf.nn.embedding_lookup(self.ia_embeddings, self.neg_items)
-
+    
             """
             *********************************************************
             Inference for the testing phase.
             """
             self.batch_ratings = tf.matmul(self.u_g_embeddings, self.pos_i_g_embeddings, transpose_a=False, transpose_b=True)
 
-
     def _create_loss(self):
-        with tf.name_scope("loss"):
-
+        with tf.name_scope("loss"): 
+            
             self.pos_scores = tf.reduce_sum(tf.multiply(self.u_g_embeddings, self.pos_i_g_embeddings), axis=1)
             neg_scores = tf.reduce_sum(tf.multiply(self.u_g_embeddings, self.neg_i_g_embeddings), axis=1)
+    
+            embedding_regularizer = l2_loss(self.u_g_embeddings, self.pos_i_g_embeddings, self.neg_i_g_embeddings)
 
-            regularizer = tf.nn.l2_loss(self.u_g_embeddings) + tf.nn.l2_loss(self.pos_i_g_embeddings) + tf.nn.l2_loss(self.neg_i_g_embeddings)
-            regularizer = regularizer/self.batch_size
+            maxi = tf.nn.softplus(-(self.pos_scores - neg_scores))
+            mf_loss = tf.reduce_sum(maxi)
+    
+            emb_loss = self.reg * embedding_regularizer
+            
+#             for k in range(self.n_layers):
+#                 emb_loss = emb_loss + self.reg_w*(tf.reduce_sum(tf.square(self.weights['W_gc_%d' % k])) +
+#                                                   tf.reduce_sum(tf.square(self.weights['W_bi_%d' % k])) +
+#                                                   tf.reduce_sum(tf.square(self.weights['b_gc_%d' % k])) +
+#                                                   tf.reduce_sum(tf.square(self.weights['b_bi_%d' % k])))
 
-            maxi = tf.log(tf.nn.sigmoid(self.pos_scores - neg_scores))
-            mf_loss = tf.negative(tf.reduce_mean(maxi))
+            self.loss = mf_loss + emb_loss
 
-            emb_loss = self.decay * regularizer
-
-            reg_loss = tf.constant(0.0, tf.float32, [1])
-
-            self.loss = mf_loss + emb_loss + reg_loss
     def _create_optimizer(self):
         with tf.name_scope("learner"):
-            self.optimizer=tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
-
+            self.optimizer = learner.optimizer(self.learner, self.loss, self.learning_rate)
+    
     def build_graph(self):
         self._create_placeholders()
         self._create_variables()
         self._create_inference()
         self._create_loss()
         self._create_optimizer()
-
+        
     def train_model(self):
-        for epoch in  range(self.num_epochs):
+        self.logger.info(self.evaluator.metrics_info())
+        for epoch in  range(1,self.num_epochs+1):
             # Generate training instances
-            user_input, item_input_pos, item_input_neg = data_gen._get_pairwise_all_data(self.dataset)
-
+            user_input, item_input_pos, item_input_neg = DataGenerator._get_pairwise_all_data(self.dataset)
+            data_iter = DataIterator(user_input, item_input_pos, item_input_neg,
+                                         batch_size=self.batch_size, shuffle=True)
+            
             total_loss = 0.0
             training_start_time = time()
             num_training_instances = len(user_input)
-            for num_batch in np.arange(int(num_training_instances/self.batch_size)):
-                bat_users,bat_items_pos,bat_items_neg =\
-                 data_gen._get_pairwise_batch_data(user_input,\
-                 item_input_pos, item_input_neg, num_batch, self.batch_size)
-                feed_dict = {self.users: bat_users, self.pos_items: bat_items_pos,
-                              self.node_dropout: [0.1],
-                              self.mess_dropout: [0.1],
-                              self.neg_items: bat_items_neg}
+            for bat_users, bat_items_pos, bat_items_neg in data_iter:
+                    feed_dict = {self.user_input: bat_users,
+                                 self.pos_items: bat_items_pos,
+                                 self.neg_items: bat_items_neg}
+                    loss, _ = self.sess.run((self.loss, self.optimizer), feed_dict=feed_dict)
+                    total_loss += loss
 
-                loss,_ = self.sess.run((self.loss,self.optimizer),feed_dict=feed_dict)
-                total_loss+=loss
+            self.logger.info("[iter %d : loss : %f, time: %f]" % (epoch, total_loss/num_training_instances,
+                                                             time()-training_start_time))
+            if epoch % self.verbose == 0:
+                self.logger.info("epoch %d:\t%s" % (epoch, self.evaluate()))
+                
+    @timer
+    def evaluate(self):
+        self._cur_user_embeddings, self._cur_item_embeddings = self.sess.run([self.ua_embeddings, self.ia_embeddings])
+        return self.evaluator.evaluate(self)
 
-            self.logger.info("[iter %d : loss : %f, time: %f]" %(epoch+1,total_loss/num_training_instances,time()-training_start_time))
-            if epoch %self.verbose == 0:
-                Evaluate.test_model(self,self.dataset)
-
-    def predict(self, user_id, items):
-        users = np.full(len(items), user_id, dtype=np.int32)
-        return self.sess.run(self.pos_scores, feed_dict={self.users: users, self.pos_items: items})
-
+    def predict(self, user_ids, candidate_items_userids):
+        if candidate_items_userids is None:
+            user_embed = self._cur_user_embeddings[user_ids]
+            ratings = np.matmul(user_embed, self._cur_item_embeddings.T)
+        else:
+            ratings = []
+            for userid, items_by_userid in zip(user_ids, candidate_items_userids):
+                user_embed = self._cur_user_embeddings[userid]
+                items_embed = self._cur_item_embeddings[items_by_userid]
+                ratings.append(np.squeeze(np.matmul(user_embed, items_embed.T)))
+            
+        return ratings
+    
     def _create_ngcf_embed(self):
         # Generate a set of adjacency sub-matrix.
-        if self.node_dropout_flag =='True':
+        if self.node_dropout_flag == 'True':  # TODO true或True? 统一下
             # node dropout.
             A_fold_hat = self._split_A_hat_node_dropout(self.norm_adj)
         else:
@@ -196,12 +213,11 @@ class NGCF(AbstractRecommender):
 
             # non-linear activation.
             ego_embeddings = sum_embeddings + bi_embeddings
-
             # message dropout.
-            ego_embeddings = tf.nn.dropout(ego_embeddings, 1 - self.mess_dropout[k])
+            ego_embeddings = tf.nn.dropout(ego_embeddings, 1-self.mess_dropout_ratio)
 
             # normalize the distribution of embeddings.
-            norm_embeddings = tf.math.l2_normalize(ego_embeddings, axis=1)
+            norm_embeddings = tf.nn.l2_normalize(ego_embeddings, axis=1)
 
             all_embeddings += [norm_embeddings]
 
@@ -213,7 +229,6 @@ class NGCF(AbstractRecommender):
         A_fold_hat = self._split_A_hat(self.norm_adj)
         embeddings = tf.concat([self.weights['user_embedding'], self.weights['item_embedding']], axis=0)
 
-
         all_embeddings = [embeddings]
 
         for k in range(0, self.n_layers):
@@ -223,7 +238,8 @@ class NGCF(AbstractRecommender):
 
             embeddings = tf.concat(temp_embed, 0)
             embeddings = tf.nn.leaky_relu(tf.matmul(embeddings, self.weights['W_gc_%d' %k]) + self.weights['b_gc_%d' %k])
-            embeddings = tf.nn.dropout(embeddings, 1 - self.mess_dropout[k])
+                
+            embeddings = tf.nn.dropout(embeddings, 1 - self.mess_dropout_ratio)
 
             all_embeddings += [embeddings]
 
@@ -247,22 +263,22 @@ class NGCF(AbstractRecommender):
             embeddings = tf.nn.leaky_relu(tf.matmul(embeddings, self.weights['W_gc_%d' % k]) + self.weights['b_gc_%d' % k])
             # dense layer.
             mlp_embeddings = tf.matmul(embeddings, self.weights['W_mlp_%d' %k]) + self.weights['b_mlp_%d' %k]
-            mlp_embeddings = tf.nn.dropout(mlp_embeddings, 1 - self.mess_dropout[k])
+            mlp_embeddings = tf.nn.dropout(mlp_embeddings, 1 - self.mess_dropout_ratio)
 
             all_embeddings += [mlp_embeddings]
         all_embeddings = tf.concat(all_embeddings, 1)
 
         u_g_embeddings, i_g_embeddings = tf.split(all_embeddings, [self.num_users, self.num_items], 0)
         return u_g_embeddings, i_g_embeddings
-
+        
     def _init_weights(self):
         all_weights = dict()
-
-        initializer = tf.contrib.layers.xavier_initializer()
+        embed_initializer = tool.get_initializer(self.embed_init_method, self.stddev)
+        weight_initializer = tool.get_initializer(self.weight_init_method, self.stddev)
 
         if self.pretrain_data is None:
-            all_weights['user_embedding'] = tf.Variable(initializer([self.num_users, self.emb_dim]), name='user_embedding')
-            all_weights['item_embedding'] = tf.Variable(initializer([self.num_items, self.emb_dim]), name='item_embedding')
+            all_weights['user_embedding'] = tf.Variable(embed_initializer([self.num_users, self.emb_dim]), name='user_embedding')
+            all_weights['item_embedding'] = tf.Variable(embed_initializer([self.num_items, self.emb_dim]), name='item_embedding')
             self.logger.info('using xavier initialization')
         else:
             all_weights['user_embedding'] = tf.Variable(initial_value=self.pretrain_data['user_embed'], trainable=True,
@@ -275,22 +291,22 @@ class NGCF(AbstractRecommender):
 
         for k in range(self.n_layers):
             all_weights['W_gc_%d' %k] = tf.Variable(
-                initializer([self.weight_size_list[k], self.weight_size_list[k+1]]), name='W_gc_%d' % k)
+                weight_initializer([self.weight_size_list[k], self.weight_size_list[k+1]]), name='W_gc_%d' % k)
             all_weights['b_gc_%d' %k] = tf.Variable(
-                initializer([1, self.weight_size_list[k+1]]), name='b_gc_%d' % k)
+                weight_initializer([1, self.weight_size_list[k+1]]), name='b_gc_%d' % k)
 
             all_weights['W_bi_%d' % k] = tf.Variable(
-                initializer([self.weight_size_list[k], self.weight_size_list[k + 1]]), name='W_bi_%d' % k)
+                weight_initializer([self.weight_size_list[k], self.weight_size_list[k + 1]]), name='W_bi_%d' % k)
             all_weights['b_bi_%d' % k] = tf.Variable(
-                initializer([1, self.weight_size_list[k + 1]]), name='b_bi_%d' % k)
+                weight_initializer([1, self.weight_size_list[k + 1]]), name='b_bi_%d' % k)
 
             all_weights['W_mlp_%d' % k] = tf.Variable(
-                initializer([self.weight_size_list[k], self.weight_size_list[k+1]]), name='W_mlp_%d' % k)
+                weight_initializer([self.weight_size_list[k], self.weight_size_list[k+1]]), name='W_mlp_%d' % k)
             all_weights['b_mlp_%d' % k] = tf.Variable(
-                initializer([1, self.weight_size_list[k+1]]), name='b_mlp_%d' % k)
+                weight_initializer([1, self.weight_size_list[k+1]]), name='b_mlp_%d' % k)
 
         return all_weights
-
+     
     def normalized_adj_single(self,adj):
         rowsum = np.array(adj.sum(1))
 
@@ -301,16 +317,17 @@ class NGCF(AbstractRecommender):
         # norm_adj = adj.dot(d_mat_inv)
         self.logger.info('generate single-normalized adjacency matrix.')
         return norm_adj.tocoo()
+
     def get_adj_mat(self):
         A = sp.dok_matrix((self.num_users + self.num_items, self.num_users + self.num_items), dtype=np.float32)
         A = A.tolil()
         A[:self.num_users, self.num_users:] = self.graph
         A[self.num_users:, :self.num_users] = self.graph.transpose()
         A = A.todok()
-        if self.adj_type== 'plain':
+        if self.adj_type == 'plain':
             adj_mat = A
             self.logger.info('use the plain adjacency matrix')
-        elif self.adj_type == 'norm':
+        elif self.adj_type == 'norm':  
             adj_mat = self.normalized_adj_single(A + sp.eye(A.shape[0]))
             self.logger.info('use the normalized adjacency matrix')
         elif self.adj_type == 'gcmc':
@@ -319,9 +336,9 @@ class NGCF(AbstractRecommender):
         else:
             adj_mat = self.normalized_adj_single(A) + sp.eye(A.shape[0])
             self.logger.info('use the mean adjacency matrix')
-
+    
         return adj_mat.tocsr()
-
+    
     def _split_A_hat(self, X):
         A_fold_hat = []
 
@@ -350,9 +367,9 @@ class NGCF(AbstractRecommender):
             # A_fold_hat.append(self._convert_sp_mat_to_sp_tensor(X[start:end]))
             temp = self._convert_sp_mat_to_sp_tensor(X[start:end])
             n_nonzero_temp = X[start:end].count_nonzero()
-            A_fold_hat.append(self._dropout_sparse(temp, 1 - self.node_dropout[0], n_nonzero_temp))
+            A_fold_hat.append(self._dropout_sparse(temp, 1 - self.node_dropout_ratio, n_nonzero_temp))
         return A_fold_hat
-
+    
     def _dropout_sparse(self, X, keep_prob, n_nonzero_elems):
         """
         Dropout for sparse tensors.
@@ -364,7 +381,7 @@ class NGCF(AbstractRecommender):
         pre_out = tf.sparse_retain(X, dropout_mask)
 
         return pre_out * tf.div(1., keep_prob)
-
+    
     def _convert_sp_mat_to_sp_tensor(self, X):
         coo = X.tocoo().astype(np.float32)
         indices = np.mat([coo.row, coo.col]).transpose()
