@@ -23,3 +23,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - DiffNet model with missing social_file property and incorrect train matrix variable name
+- NGCF model by correcting the merging of two arrays

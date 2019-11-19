@@ -287,8 +287,8 @@ class NGCF(AbstractRecommender):
                                                         name='item_embedding', dtype=tf.float32)
             self.logger.info('using pretrained initialization')
 
-        self.weight_size_list = [self.emb_dim] + self.weight_size
-
+        self.weight_size_list = np.concatenate([np.array([self.emb_dim]), self.weight_size])
+        
         for k in range(self.n_layers):
             all_weights['W_gc_%d' %k] = tf.Variable(
                 weight_initializer([self.weight_size_list[k], self.weight_size_list[k+1]]), name='W_gc_%d' % k)
