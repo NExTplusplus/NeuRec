@@ -23,7 +23,8 @@ class DiffNet(SocialAbstractRecommender):
         "feature_dimension",
         "init_method",
         "stddev",
-        "verbose"
+        "verbose",
+        "social_file"
     ]
 
     def __init__(self, **kwds):
@@ -48,7 +49,7 @@ class DiffNet(SocialAbstractRecommender):
         self.userids = self.dataset.userids
         self.itemids = self.dataset.itemids
         
-        self.trainMatrix = self.dataset.trainMatrix
+        self.trainMatrix = self.dataset.train_matrix
         self.trainDict = csr_to_user_dict(self.trainMatrix)
         self.social_matrix = self.social_matrix + self.social_matrix.transpose()
 

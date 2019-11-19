@@ -20,3 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - Evaluation folder with relevant files
+
+### Fixed
+- DiffNet model with missing social_file property and incorrect train matrix variable name
