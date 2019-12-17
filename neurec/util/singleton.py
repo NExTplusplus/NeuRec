@@ -1,3 +1,4 @@
+"""Handles singleton classes"""
 class Singleton(type):
     """Singleton class to always have one instance of a class."""
 

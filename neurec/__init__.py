@@ -3,4 +3,4 @@ __all__ = [
     'neurec'
 ]
 
-from .neurec import setup, run, listModels, listProperties
+from .neurec import setup, run, list_models, list_properties

@@ -1,6 +1,7 @@
+"""Dict mapping property name to type"""
 from neurec.util.helpers import to_list, to_bool
 
-types = {
+TYPES = {
     "data.input.path": str,
     "data.input.dataset": str,
     "data.splitter": str,

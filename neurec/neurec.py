@@ -1,102 +1,104 @@
+"""Sets up NeuRec and runs the models"""
 import logging
-from neurec.data.Dataset import Dataset
-from neurec.data.properties import types
-from neurec.data.models import models
-from neurec.util import tool
-from neurec.util.properties import Properties
 import numpy as np
-import os
-import random
 import tensorflow as tf
+from neurec.data.properties import TYPES
+from neurec.data.dataset import Dataset
+from neurec.evaluation import Evaluate
+from neurec.util.properties import Properties
+from neurec.data.models import MODELS
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-
-def setup(properties_path, properties_section="DEFAULT", numpy_seed=2018, random_seed=2018, tensorflow_seed=2018):
-    """Sets up initial values for neurec and loads the dataset.
+def setup(properties_path, properties_section="DEFAULT", numpy_seed=2018, tensorflow_seed=2017):
+    """Setups initial values for neurec.
 
     properties_path -- path to properties file
     properties_section -- section inside the properties files to read (default "DEFAULT")
     numpy_seed -- seed value for numpy random (default 2018)
-    random_seed -- seed value for random (default 2018)
-    tensorflow_seed -- seed value for tensorflow random (default 2018)
+    tensorflow_seed -- seed value for tensorflow random (default 2017)
     """
     np.random.seed(numpy_seed)
-    random.seed(random_seed)
     tf.set_random_seed(tensorflow_seed)
 
-    Properties().setSection(properties_section)
-    Properties().setProperties(properties_path)
+    Properties().set_section(properties_section)
+    Properties().set_properties(properties_path)
 
-    properties = Properties().getProperties([
-        "data.input.path",
-        "data.input.dataset",
-        "data.splitter",
-        "data.convert.separator",
-        "data.convert.binarize.threshold",
-        "rec.evaluate.neg",
-        "data.column.format",
-        "data.splitterratio",
-        "gpu_id"
-    ])
+    data_input_path = Properties().get_property("data.input.path")
+    dataset_name = Properties().get_property("data.input.dataset")
+    splitter = Properties().get_property("data.splitter")
+    separator = Properties().get_property("data.convert.separator")
+    threshold = Properties().get_property("data.convert.binarize.threshold")
+    evaluate_neg = Properties().get_property("rec.evaluate.neg")
+    dataset_format = Properties().get_property("data.column.format")
+    splitter_ratio = Properties().get_property("data.splitterratio")
 
-    Dataset(
-        properties["data.input.path"],
-        properties["data.input.dataset"],
-        properties["data.column.format"],
-        properties["data.splitter"],
-        properties["data.convert.separator"],
-        properties["data.convert.binarize.threshold"],
-        properties["rec.evaluate.neg"],
-        properties["data.splitterratio"]
-    )
+    Dataset().add_dataset(data_input_path,
+                          dataset_name,
+                          dataset_format,
+                          splitter,
+                          separator,
+                          threshold,
+                          evaluate_neg,
+                          splitter_ratio)
 
-    if tool.get_available_gpus(properties["gpu_id"]):
-        os.environ["CUDA_VISIBLE_DEVICES"] = properties["gpu_id"]
+def setup_logging():
+    """Sets up logging and handlers"""
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
+    file_handler = logging.FileHandler('neurec.log', mode='a')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
 def run():
     """Trains and evaluates a model."""
     logger = logging.getLogger(__name__)
 
-    recommender = Properties().getProperty("recommender")    
+    if not Dataset().is_ready:
+        raise RuntimeError("Dataset not set. Call setup() " \
+                + "function and pass a properties file to set the dataset")
 
-    if not recommender in models:
-        raise KeyError("Recommender " + str(recommender) + " not recognised. Add recommender to neurec.util.models")
+    recommender = Properties().get_property("recommender")
 
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    num_thread = Properties().getProperty("rec.number.thread")
+    if not recommender in MODELS:
+        raise KeyError("Recommender " + str(recommender) \
+                + " not recognised. Add recommender to neurec.util.models")
+
+    gpu_options = tf.GPUOptions(allow_growth=True)
+    config = tf.ConfigProto(gpu_options=gpu_options)
+    num_thread = Properties().get_property("rec.number.thread")
 
     with tf.Session(config=config) as sess:
-        model = models[recommender](sess=sess)
+        model = MODELS[recommender](sess=sess)
         model.build_graph()
         sess.run(tf.global_variables_initializer())
         model.train_model()
+        Evaluate.test_model(model, Dataset(), num_thread)
 
-def listModels():
+def list_models():
     """Returns a list of available models."""
-    return models
+    return MODELS
 
-def listProperties(model):
+def list_properties(model):
     """Returns a list of properties used by the model.
 
-    model -- name of a model
+    name -- name of a model
     """
-    model_properties = models[model].properties
-    list = []
+    model_properties = MODELS[model].properties
+    properties_list = []
 
-    for property in model_properties:
-        list.append({
-            "name": property,
-            "type": types[property].__name__
+    for model_property in model_properties:
+        properties_list.append({
+            "name": model_property,
+            "type": TYPES[model_property].__name__
         })
 
-    return list
+    return properties_list
+
+setup_logging()

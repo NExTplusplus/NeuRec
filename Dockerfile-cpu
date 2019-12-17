@@ -6,7 +6,10 @@ WORKDIR /tf/neurec
 
 COPY ./neurec .
 
-RUN pip3 install neurec
+COPY . .
+
+RUN pip3 install neurec && \
+    pip3 install -r requirements.txt
 
 WORKDIR /tf
 

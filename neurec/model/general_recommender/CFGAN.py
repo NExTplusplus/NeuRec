@@ -5,7 +5,7 @@ based on Generative Adversarial Networks." in CIKM2018
 '''
 # ZP: Hybrid of zero-reconstruction regularization and partial-masking
 
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 import numpy as np
 import tensorflow as tf
 from scipy.sparse import csr_matrix

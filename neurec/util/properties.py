@@ -1,7 +1,8 @@
+"""Handles property settings for NeuRec"""
 import logging
 from neurec.util.singleton import Singleton
 from neurec.util import reader
-from neurec.data.properties import types
+from neurec.data.properties import TYPES
 
 class Properties(metaclass=Singleton):
     """A class to handle property settings."""
@@ -9,41 +10,32 @@ class Properties(metaclass=Singleton):
         """Setups the class with an empty properties dictionary."""
         self.logger = logging.getLogger(__name__)
         self.__section = section
-        self.__properties = self.setProperties(properties) if properties else {}
+        self.__properties = self.set_properties(properties) if properties else {}
 
-    def setSection(self, name):
+    def set_section(self, name):
         """Sets the section of the property file to read from.
 
         name -- name of the section
         """
         self.__section = name
 
-    def setProperty(self, name, value):
-        """Sets the value for a property.
-
-        name -- name of the property
-        value -- value for the property
-        """
-        self.__properties[name] = value
-
-    def setProperties(self, path):
+    def set_properties(self, path):
         """Reads a properties file to load the property values.
 
         path -- path to properties file
         """
-        properties = reader.file(path)
+        self.__properties = reader.file(path)
 
-        for key, value in properties[self.__section].items():
-            self.setProperty(key, self.__convertProperty(key, value))
-
-    def getProperty(self, name):
+    def get_property(self, name):
         """Returns the value for a property."""
         try:
-            return self.__properties[name]
+            value = self.__properties[self.__section][name]
         except KeyError:
             raise KeyError('Key ' + str(name) + ' not found in properties. Add to your properties')
 
-    def getProperties(self, names):
+        return Properties().convert_property(name, value)
+
+    def get_properties(self, names):
         """Returns a dictionary of values for the properties names.
 
         names -- list of property names
@@ -51,25 +43,22 @@ class Properties(metaclass=Singleton):
         values = {}
 
         for name in names:
-            values[name] = self.getProperty(name)
+            values[name] = self.get_property(name)
 
         return values
 
-    def __convertProperty(self, name, value):
-        """Converts a property's value to its required form.
+    @staticmethod
+    def convert_property(name, value):
+        """Casts a property's value to its required type.
 
         name -- name of property
-        value -- value to convert, can be a list or single value
+        value -- value to convert
         """
-        conversions = types[name] if type(types[name]) ==  list else [types[name]]
-        converted_value = value
-
         try:
-            for conversion in conversions:
-                converted_value = conversion(converted_value)
+            return TYPES[name](value)
         except KeyError:
-            raise KeyError("Could not convert property " + str(name) + ". Key not found in types. Add to neurec.data.properties.types")
+            raise KeyError("Could not convert property " + str(name) \
+                    + ". Key not found in types. Add to neurec.data.properties.types")
         except ValueError:
-            raise ValueError("Could not covert the value of " + str(name) + '. ' + str(value) + " does not match type set in neurec.data.properties.types")
-
-        return converted_value
+            raise ValueError("Could not covert the value of " + str(name) + '.' + str(value) \
+                    + " does not match type set in neurec.data.properties.types")

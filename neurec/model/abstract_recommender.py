@@ -1,49 +1,36 @@
+"""Handles building model classes"""
 from abc import ABC, abstractmethod
-from neurec.data.Dataset import Dataset
-from neurec.util.properties import Properties
 import logging
-import pandas as pd
-import numpy as np
-import scipy.sparse as sp
-from neurec.evaluator import FoldOutEvaluator, LeaveOneOutEvaluator
-from neurec.util import reader
+from neurec.data.dataset import Dataset
+from neurec.util.properties import Properties
 
 class AbstractRecommender(ABC):
     """Abstract class for building a Recommender class."""
     @property
     @abstractmethod
     def properties(self):
-        pass
+        """List of properties used by the model"""
 
     def __init__(self, sess):
         """Sets up the model with properties, dataset, and session."""
         self.logger = logging.getLogger(__name__)
-        self.conf = Properties().getProperties(self.properties)
+        self.conf = Properties().get_properties(self.properties)
         self.dataset = Dataset()
         self.sess = sess
 
-        if Properties().getProperty("data.splitter") in ("ratio", "given"):
-            self.evaluator = FoldOutEvaluator(self.dataset.train_matrix, self.dataset.test_matrix,
-                                              self.dataset.negative_matrix, top_k=Properties().getProperty("topk"))
-        elif Properties().getProperty("data.splitter") == "loo":
-            self.evaluator = LeaveOneOutEvaluator(self.dataset.train_matrix, self.dataset.test_matrix,
-                                                  self.dataset.negative_matrix, top_k=Properties().getProperty("topk"))
-        else:
-            raise ValueError("Set data.splitter to one of the following: ['ratio', 'given', 'loo']")
-
-        self.logger.info("Arguments: %s " %(self.conf))
+        self.logger.info("Arguments: %s", self.conf)
 
     @abstractmethod
     def build_graph(self):
-        pass
+        """Sets up the model's network"""
 
     @abstractmethod
     def train_model(self):
-        pass
+        """Trains the model's network"""
 
     @abstractmethod
-    def predict(self, user_ids, items):
-        pass
+    def predict(self):
+        """Performs a prediction task on the model"""
 
 class SeqAbstractRecommender(AbstractRecommender):
     def __init__(self, **kwds):

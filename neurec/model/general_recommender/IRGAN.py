@@ -3,7 +3,7 @@ Reference: Jun Wang, et al., "IRGAN: A Minimax Game for Unifying Generative and
 Discriminative Information Retrieval Models." SIGIR 2017.
 @author: Zhongchuan Sun
 '''
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 import tensorflow as tf
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor

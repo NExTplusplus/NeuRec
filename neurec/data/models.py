@@ -31,7 +31,7 @@ from neurec.model.sequential_recommender.TransRec import TransRec
 from neurec.model.social_recommender.DiffNet import DiffNet
 from neurec.model.social_recommender.SBPR import SBPR
 
-models = {
+MODELS = {
     "apr": APR,
     "cdae": CDAE,
     "cfgan": CFGAN,
