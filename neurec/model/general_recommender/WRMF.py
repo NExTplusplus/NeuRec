@@ -4,7 +4,7 @@ Reference: Yifan Hu et al., "Collaborative Filtering for Implicit Feedback Datas
 """
 import numpy as np
 from time import time
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 import tensorflow as tf
 from neurec.util import tool
 from neurec.util.tool import timer

@@ -7,7 +7,7 @@ Reference: https://github.com/hidasib/GRU4Rec
 """
 
 import numpy as np
-from neurec.model.AbstractRecommender import SeqAbstractRecommender
+from neurec.model.abstract_recommender import SeqAbstractRecommender
 import tensorflow as tf
 from neurec.util.tool import l2_loss
 

@@ -7,7 +7,7 @@ import tensorflow as tf
 import numpy as np
 from time import time
 from neurec.util import learner, DataGenerator, tool
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 from neurec.util.DataIterator import DataIterator
 from neurec.util.tool import timer
 from neurec.util.tool import l2_loss

@@ -8,7 +8,7 @@ from time import time
 from neurec.util import learner, tool
 from tensorflow.contrib.layers import apply_regularization, l2_regularizer
 
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 from neurec.util.tool import timer
 from neurec.util.tool import csr_to_user_dict
 

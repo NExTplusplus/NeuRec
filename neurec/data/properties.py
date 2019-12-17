@@ -123,5 +123,9 @@ TYPES = {
     "num_heads": int,
     "social_file": str,
     "hidden_size": int,
-    "step": int
+    "step": int,
+    "gpu_mem": float,
+    "user_min": int,
+    "item_min": int,
+    "by_time": to_bool
 }

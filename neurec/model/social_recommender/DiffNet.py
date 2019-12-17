@@ -1,4 +1,4 @@
-from neurec.model.AbstractRecommender import SocialAbstractRecommender
+from neurec.model.abstract_recommender import SocialAbstractRecommender
 import tensorflow as tf
 import numpy as np
 from time import time

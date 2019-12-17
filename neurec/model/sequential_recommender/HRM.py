@@ -10,7 +10,7 @@ from neurec.util import learner, DataGenerator, tool
 
 from neurec.util.DataIterator import DataIterator
 from neurec.util.tool import csr_to_user_dict_bytime
-from neurec.model.AbstractRecommender import SeqAbstractRecommender
+from neurec.model.abstract_recommender import SeqAbstractRecommender
 from neurec.util.tool import l2_loss
 
 

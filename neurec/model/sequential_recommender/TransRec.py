@@ -3,7 +3,7 @@ Reference: Ruining He et al., "Translation-based Recommendation." in RecSys 2017
 @author: wubin
 """
 
-from neurec.model.AbstractRecommender import SeqAbstractRecommender
+from neurec.model.abstract_recommender import SeqAbstractRecommender
 import tensorflow as tf
 import numpy as np
 from time import time

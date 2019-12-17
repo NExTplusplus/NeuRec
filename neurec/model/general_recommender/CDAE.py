@@ -2,7 +2,7 @@
 Reference: Wu, Yao, et al. "Collaborative denoising auto-encoders for top-n recommender systems." in WSDM2016
 @author: wubin
 '''
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 
 import tensorflow as tf
 import numpy as np

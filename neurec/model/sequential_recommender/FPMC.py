@@ -3,7 +3,7 @@ Reference: Steffen Rendle et al., "Factorizing Personalized Markov Chains
 for Next-Basket Recommendation." in WWW 2010.
 @author: wubin
 """
-from neurec.model.AbstractRecommender import SeqAbstractRecommender
+from neurec.model.abstract_recommender import SeqAbstractRecommender
 import tensorflow as tf
 import numpy as np
 from time import time

@@ -2,7 +2,7 @@
 Reference: ThaiBinh Nguyen, et al. "NPE: Neural Personalized Embedding for Collaborative Filtering" in ijcai2018
 @author: wubin
 '''
-from neurec.model.AbstractRecommender import SeqAbstractRecommender
+from neurec.model.abstract_recommender import SeqAbstractRecommender
 import tensorflow as tf
 import numpy as np
 from time import time

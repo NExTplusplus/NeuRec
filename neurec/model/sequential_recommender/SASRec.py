@@ -6,7 +6,7 @@ Reference: https://github.com/kang205/SASRec
 """
 
 import numpy as np
-from neurec.model.AbstractRecommender import SeqAbstractRecommender
+from neurec.model.abstract_recommender import SeqAbstractRecommender
 from neurec.util import DataIterator
 from neurec.util.tool import csr_to_user_dict_bytime
 import tensorflow as tf

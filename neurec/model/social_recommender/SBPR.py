@@ -7,7 +7,7 @@ import tensorflow as tf
 import numpy as np
 from time import time
 from neurec.util import learner, tool
-from neurec.model.AbstractRecommender import SocialAbstractRecommender
+from neurec.model.abstract_recommender import SocialAbstractRecommender
 from neurec.util.tool import timer
 from neurec.util.DataIterator import DataIterator
 from neurec.util.tool import csr_to_user_dict, randint_choice, l2_loss

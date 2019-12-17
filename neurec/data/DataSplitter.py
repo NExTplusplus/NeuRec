@@ -1,99 +1,101 @@
-import scipy.sparse as sp
-from neurec.util.tool import get_data_format
+"""
+@author: Zhongchuan Sun
+"""
+from neurec.data.utils import filter_data, remap_id, get_dataset_names
+from neurec.data.utils import split_by_ratio, split_by_loo, load_data
+from neurec.util import reader
+from neurec.util.tool import randint_choice
 import pandas as pd
-import math
+import numpy as np
+import os
+from neurec.util.properties import Properties
+import logging
+from importlib import util
 import logging
 
-class DataSplitter(object):
-    def __init__(self, path, splitter, data_format, separator, threshold, splitterRatio=[0.8,0.2]):
-        self.logger = logging.getLogger(__name__)
-        self.path = path
-        self.splitter = splitter
-        self.separator = separator
-        self.data_format = data_format
-        self.splitterRatio = splitterRatio
-        self.threshold = threshold
-        if float(splitterRatio[0]) + float(splitterRatio[1]) != 1.0:
-            raise ValueError("please given a correct splitterRatio")
-        
-    def load_data(self):
-        self.logger.info("Loading interaction records from %s "%(self.path))
-        time_matrix = None
-        columns = get_data_format(self.data_format)
-        data = pd.read_csv(self.path, sep=self.separator, header=None, names=columns)
-        
-        if self.data_format == "UIRT" or self.data_format == "UIR":
-            data = data[data["rating"] >= self.threshold]
+class Splitter():
+    def __init__(self):
+        dataset_path = Properties().get_property('data.input.path')
+        dataset_name = Properties().get_property('data.input.dataset')
+        self.filename = os.path.join(dataset_path, dataset_name)
 
-        unique_user = data["user"].unique()
-        user2id = pd.Series(data=range(len(unique_user)), index=unique_user)
-        data["user"] = data["user"].map(user2id)
-        num_users = len(unique_user)
-        userids = user2id.to_dict()
+        if (dataset_path == 'neurec'):
+            neurec_path = util.find_spec('neurec', package='neurec').submodule_search_locations[0]
+            self.filename = os.path.join(neurec_path, 'dataset', dataset_name)
 
-        unique_item = data["item"].unique()
-        item2id = pd.Series(data=range(len(unique_item)), index=unique_item)
-        data["item"] = data["item"].map(item2id)
-        num_items = len(unique_item)
-        itemids = item2id.to_dict()
+        self.ratio = Properties().get_property("data.splitterratio")
+        self.file_format = Properties().get_property("data.column.format")
+        self.sep = Properties().get_property("data.convert.separator")
+        self.user_min = Properties().get_property("user_min")
+        self.item_min = Properties().get_property("item_min")
+        self.by_time = Properties().get_property("by_time")
+        self.spliter = Properties().get_property("data.splitter")
+        self.test_neg = Properties().get_property("rec.evaluate.neg")
+        self.logger = logging.getLogger()
 
-        if self.data_format == "UIRT" or self.data_format == "UIT":
-            data.sort_values(by=["user", "time"], inplace=True)
-            time_matrix = sp.csr_matrix((data["time"], (data["user"], data["item"])), shape=(num_users, num_items))
-
-        if self.splitter == "ratio":
-            train_actions, test_actions = self.HoldOutDataSplitter(data)
-            
-        else:
-            train_actions, test_actions = self.LeaveOneOutDataSplitter(data)
-        
-        if self.data_format == "UI": 
-            train_matrix = sp.csr_matrix(([1]*len(train_actions["user"]), (train_actions["user"], train_actions["item"])), shape=(num_users, num_items))
-            test_matrix = sp.csr_matrix(([1]*len(test_actions["user"]), (test_actions["user"], test_actions["item"])), shape=(num_users, num_items))      
-        
-        else:
-            train_matrix = sp.csr_matrix((train_actions["rating"], (train_actions["user"], train_actions["item"])), shape=(num_users, num_items))
-            test_matrix = sp.csr_matrix((test_actions["rating"], (test_actions["user"], test_actions["item"])), shape=(num_users, num_items))
-            
-        num_ratings = len(train_actions["user"]) + len(test_actions["user"])
-        sparsity = 1- num_ratings/(num_users*num_items)
-        self.logger.info("\"num_users\": %d,\"num_items\":%d, \"num_ratings\":%d, \"sparsity\":%.4f"%(num_users, num_items, num_ratings, sparsity))   
-        return train_matrix, test_matrix, time_matrix, userids, itemids
-    
-    def HoldOutDataSplitter(self, data):
-        train_actions = []
-        test_actions = []
-
-        user_grouped = data.groupby(by=["user"])
-        for user, u_data in user_grouped:
-            u_data_len = len(u_data)
-            if self.data_format == "UIR" or self.data_format == "UI":
-                u_data = u_data.sample(frac=1)
-            idx = math.ceil(self.splitterRatio[0] * u_data_len)
-            train_actions.append(u_data.iloc[:idx])
-            test_actions.append(u_data.iloc[idx:])
-
-        train_actions = pd.concat(train_actions, ignore_index=True)
-        test_actions = pd.concat(test_actions, ignore_index=True)
-
-        return train_actions, test_actions
-    
-    def LeaveOneOutDataSplitter(self, data):
-        train_actions = []
-        test_actions = []
-
-        user_grouped = data.groupby(by=["user"])
-        for user, u_data in user_grouped:
-            u_data_len = len(u_data)
-            if u_data_len <= 3:
-                train_actions = train_actions.append(u_data)
+    def split(self):
+        if self.file_format.lower() == "uirt":
+            columns = ["user", "item", "rating", "time"]
+            if self.by_time is False:
+                by_time = False
             else:
-                if self.data_format == "UIR" or self.data_format == "UI":
-                    u_data = u_data.sample(frac=1)
-                train_actions.append(u_data.iloc[:-1])
-                test_actions.append(u_data.iloc[-1:])
+                by_time = True
+        elif self.file_format.lower() == "uir":
+            columns = ["user", "item", "rating"]
+            by_time = False
+        else:
+            raise ValueError("There is not data format '%s'" % self.file_format)
 
-        train_actions = pd.concat(train_actions, ignore_index=True)
-        test_actions = pd.concat(test_actions, ignore_index=True)
+        print("load data...")
+        all_data = load_data(self.filename, self.sep, columns)
+        print("filter data...")
+        filtered_data = filter_data(all_data, user_min=self.user_min, item_min=self.item_min)
+        print("remap id...")
+        remapped_data, user2id, item2id = remap_id(filtered_data)
 
-        return train_actions, test_actions
+        user_num = len(remapped_data["user"].unique())
+        item_num = len(remapped_data["item"].unique())
+        rating_num = len(remapped_data["item"])
+        sparsity = 1 - 1.0 * rating_num / (user_num * item_num)
+        # sampling negative item for test
+        if self.test_neg > 0:
+            neg_items = []
+            grouped_user = remapped_data.groupby(["user"])
+            for user, u_data in grouped_user:
+                line = [user]
+                line.extend(randint_choice(item_num, size=self.test_neg, replace=False, exclusion=u_data["item"]))
+                neg_items.append(line)
+
+            neg_items = pd.DataFrame(neg_items)
+        else:
+            neg_items = None
+
+        print("split data...")
+        if self.spliter == "ratio":
+            train_data, test_data = split_by_ratio(remapped_data, ratio=self.ratio, by_time=by_time)
+        elif self.spliter == "loo":
+            train_data, test_data = split_by_loo(remapped_data, by_time=by_time)
+        else:
+            raise ValueError("Splitter not recognised: '%s'" % self.spliter)
+
+        print("save to file...")
+        data_names = get_dataset_names()
+        np.savetxt(data_names['train'], train_data, fmt='%d', delimiter=self.sep)
+        np.savetxt(data_names['test'], test_data, fmt='%d', delimiter=self.sep)
+
+        if neg_items is not None:
+            np.savetxt(data_names['neg'], neg_items, fmt='%d', delimiter=self.sep)
+
+        user2id = [[user, id] for user, id in user2id.to_dict().items()]
+        item2id = [[item, id] for item, id in item2id.to_dict().items()]
+        np.savetxt(data_names['user2id'], user2id, fmt='%s', delimiter=self.sep)
+        np.savetxt(data_names['item2id'], item2id, fmt='%s', delimiter=self.sep)
+
+        self.logger.info(self.filename)
+        self.logger.info("The number of users: %d" % user_num)
+        self.logger.info("The number of items: %d" % item_num)
+        self.logger.info("The number of ratings: %d" % rating_num)
+        self.logger.info("Average actions of users: %.2f" % (1.0*rating_num/user_num))
+        self.logger.info("Average actions of items: %.2f" % (1.0*rating_num/item_num))
+        self.logger.info("The sparsity of the dataset: %f%%" % (sparsity*100))
+

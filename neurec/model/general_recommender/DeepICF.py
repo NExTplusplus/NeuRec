@@ -2,7 +2,7 @@
 Reference: Feng Xue et al., "Deep Item-based Collaborative Filtering for Top-N Recommendation" in TOIS2019
 @author: wubin
 '''
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 import tensorflow as tf
 import numpy as np
 from time import time

@@ -2,7 +2,7 @@
 Reference: Santosh Kabbur et al., "FISM: Factored Item Similarity Models for Top-N Recommender Systems." in KDD 2013.
 @author: wubin
 """
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 import tensorflow as tf
 import numpy as np
 from time import time

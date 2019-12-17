@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 import logging
 from neurec.data.dataset import Dataset
+from neurec.evaluator.evaluator import FoldOutEvaluator, LeaveOneOutEvaluator
 from neurec.util.properties import Properties
 
 class AbstractRecommender(ABC):
@@ -17,6 +18,19 @@ class AbstractRecommender(ABC):
         self.conf = Properties().get_properties(self.properties)
         self.dataset = Dataset()
         self.sess = sess
+
+        splitter = Properties().get_property('data.splitter')
+        splitter_values = ['ratio', 'loo']
+
+        if splitter not in splitter_values:
+            raise ValueError('Set data.splitter to: %s', splitter_values)
+
+        if splitter == 'ratio':
+            self.evaluator = FoldOutEvaluator(self.dataset.train_matrix,
+                                              self.dataset.test_matrix)
+        else:
+            self.evaluator = LeaveOneOutEvaluator(self.dataset.train_matrix,
+                                                  self.dataset.test_matrix)
 
         self.logger.info("Arguments: %s", self.conf)
 

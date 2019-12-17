@@ -1,5 +1,6 @@
 """Functions to handle reading files in the package."""
 from configparser import ConfigParser, MissingSectionHeaderError
+import pandas
 
 def file(path):
     """Returns the configuration settings for a file.
@@ -31,3 +32,11 @@ def lines(file_path):
     except FileNotFoundError:
         raise FileNotFoundError(str(file_path)
                                 + " could not be found. Check the file path is correct.")
+
+def dataset(path, columns, separator='\t'):
+    """Returns a Pandas.Dataframe containing the data in a csv file
+
+    path -- path to csv file.
+    """
+    return pandas.read_csv(path, sep=separator, header=None, names=columns)
+

@@ -8,7 +8,7 @@ import numpy as np
 import scipy.sparse as sp
 from time import time
 from neurec.util import DataGenerator, learner, tool
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 from neurec.util.DataIterator import DataIterator
 from neurec.util.tool import timer
 from neurec.util.tool import l2_loss

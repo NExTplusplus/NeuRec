@@ -6,7 +6,7 @@ import tensorflow as tf
 import numpy as np
 from time import time
 from neurec.util import learner, tool
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 from neurec.util.tool import timer
 
 class DMF(AbstractRecommender):

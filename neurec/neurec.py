@@ -2,11 +2,11 @@
 import logging
 import numpy as np
 import tensorflow as tf
-from neurec.data.properties import TYPES
 from neurec.data.dataset import Dataset
-from neurec.evaluation import Evaluate
-from neurec.util.properties import Properties
 from neurec.data.models import MODELS
+from neurec.data.properties import TYPES
+from neurec.util import tool
+from neurec.util.properties import Properties
 
 def setup(properties_path, properties_section="DEFAULT", numpy_seed=2018, tensorflow_seed=2017):
     """Setups initial values for neurec.
@@ -22,23 +22,12 @@ def setup(properties_path, properties_section="DEFAULT", numpy_seed=2018, tensor
     Properties().set_section(properties_section)
     Properties().set_properties(properties_path)
 
-    data_input_path = Properties().get_property("data.input.path")
-    dataset_name = Properties().get_property("data.input.dataset")
-    splitter = Properties().get_property("data.splitter")
-    separator = Properties().get_property("data.convert.separator")
-    threshold = Properties().get_property("data.convert.binarize.threshold")
-    evaluate_neg = Properties().get_property("rec.evaluate.neg")
-    dataset_format = Properties().get_property("data.column.format")
-    splitter_ratio = Properties().get_property("data.splitterratio")
+    gpu = Properties().get_property("gpu_id")
 
-    Dataset().add_dataset(data_input_path,
-                          dataset_name,
-                          dataset_format,
-                          splitter,
-                          separator,
-                          threshold,
-                          evaluate_neg,
-                          splitter_ratio)
+    if tool.get_available_gpus(gpu):
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpu
+
+    Dataset().load_data()
 
 def setup_logging():
     """Sets up logging and handlers"""
@@ -60,26 +49,22 @@ def run():
     """Trains and evaluates a model."""
     logger = logging.getLogger(__name__)
 
-    if not Dataset().is_ready:
-        raise RuntimeError("Dataset not set. Call setup() " \
-                + "function and pass a properties file to set the dataset")
-
     recommender = Properties().get_property("recommender")
 
     if not recommender in MODELS:
         raise KeyError("Recommender " + str(recommender) \
                 + " not recognised. Add recommender to neurec.util.models")
 
-    gpu_options = tf.GPUOptions(allow_growth=True)
+    gpu_memory = Properties().get_property("gpu_mem")
+    gpu_options = tf.GPUOptions(allow_growth=True,
+                                per_process_gpu_memory_fraction=gpu_memory)
     config = tf.ConfigProto(gpu_options=gpu_options)
-    num_thread = Properties().get_property("rec.number.thread")
 
     with tf.Session(config=config) as sess:
         model = MODELS[recommender](sess=sess)
         model.build_graph()
         sess.run(tf.global_variables_initializer())
         model.train_model()
-        Evaluate.test_model(model, Dataset(), num_thread)
 
 def list_models():
     """Returns a list of available models."""

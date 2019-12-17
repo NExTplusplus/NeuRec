@@ -55,10 +55,16 @@ class Properties(metaclass=Singleton):
         value -- value to convert
         """
         try:
-            return TYPES[name](value)
+            conversions = (TYPES[name] if type(TYPES[name]) == list else
+                           [TYPES[name]])
+            converted_value = value
+            for conversion in conversions:
+                converted_value = conversion(converted_value)
         except KeyError:
             raise KeyError("Could not convert property " + str(name) \
                     + ". Key not found in types. Add to neurec.data.properties.types")
         except ValueError:
             raise ValueError("Could not covert the value of " + str(name) + '.' + str(value) \
                     + " does not match type set in neurec.data.properties.types")
+
+        return converted_value

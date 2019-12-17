@@ -3,7 +3,7 @@ Reference: Ziwei Zhu, et al. "Improving Top-K Recommendation via Joint
 Collaborative Autoencoders." in WWW2019
 @author: wubin
 '''
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 import tensorflow as tf
 import numpy as np
 from time import time

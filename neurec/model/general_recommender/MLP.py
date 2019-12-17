@@ -2,7 +2,7 @@
 Xiangnan He et al., "Neural Collaborative Filtering." in WWW 2017.
 @author: WuBin
 """
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 import tensorflow as tf
 import numpy as np
 from time import time

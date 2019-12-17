@@ -2,7 +2,7 @@
 Xiangnan He et al., "Outer Product-based Neural Collaborative Filtering", In IJCAI 2018.  
 @author: wubin
 '''
-from neurec.model.AbstractRecommender import AbstractRecommender
+from neurec.model.abstract_recommender import AbstractRecommender
 import tensorflow as tf
 import numpy as np
 from time import time
